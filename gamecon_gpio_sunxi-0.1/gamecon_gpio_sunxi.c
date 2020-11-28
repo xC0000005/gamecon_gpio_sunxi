@@ -1,6 +1,8 @@
 /*
- * NES, SNES, N64, PSX, Gamecube gamepad driver for Raspberry Pi
+ * Arcade1up GPIO Joystick driver.
  *
+ *  Copyright (c) 2020 Jason Nelson
+ *  derived from code
  *  Copyright (c) 2012	Markus Hiienkari
  *
  *  Based on the gamecon driver by Vojtech Pavlik
@@ -38,29 +40,17 @@
 #include <linux/version.h>
 #include <asm/io.h>
 
-MODULE_AUTHOR("Markus Hiienkari");
-MODULE_DESCRIPTION("NES, SNES, N64, PSX, GC gamepad driver");
+MODULE_AUTHOR("Jason Nelson");
+MODULE_DESCRIPTION("Allwinner SOC gamepad driver");
 MODULE_LICENSE("GPL");
 
-#define GC_MAX_DEVICES		6
-
-#define BCM2708_PERI_BASE gc_bcm2708_peri_base
-
-#define GPIO_BASE                (BCM2708_PERI_BASE + 0x200000) /* GPIO controller */
-
-#define GPIO_SET *(gpio+7)
-#define GPIO_CLR *(gpio+10)
-
-#define GPIO_STATUS (*(gpio+13))
+#define GC_MAX_DEVICES		4
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,15,0)
 #define HAVE_TIMER_SETUP
 #endif
 
 static volatile unsigned *gpio;
-
-/* BCM board peripherals address base */
-static u32 gc_bcm2708_peri_base;
 
 /**
  * gc_bcm_peri_base_probe - Find the peripherals address base for
@@ -794,59 +784,6 @@ static void gc_psx_command(struct gc *gc, int b, unsigned char *data)
 	udelay(GC_PSX_DELAY2);
 }
 
-/*
- * gc_psx_read_packet() reads a whole psx packet and returns
- * device identifier code.
- */
-
-static void gc_psx_read_packet(struct gc *gc,
-				   unsigned char data[GC_MAX_DEVICES][GC_PSX_BYTES],
-				   unsigned char id[GC_MAX_DEVICES])
-{
-	int i, j, max_len = 0;
-	unsigned long flags;
-	unsigned char data2[GC_MAX_DEVICES];
-
-	local_irq_save(flags);
-
-	/* Select pad */
-	GPIO_SET = GC_PSX_CLOCK | GC_PSX_SELECT;
-	
-	/* Deselect, begin command */
-	GPIO_CLR = GC_PSX_SELECT;
-	udelay(GC_PSX_DELAY2);
-
-	gc_psx_command(gc, 0x01, data2);	/* Access pad */
-	gc_psx_command(gc, 0x42, id);		/* Get device ids */
-	gc_psx_command(gc, 0, data2);		/* Dump status */
-
-	/* Find the longest pad */
-	for (i = 0; i < GC_MAX_DEVICES; i++) {
-		struct gc_pad *pad = &gc->pads[i];
-
-		if ((pad->type == GC_PSX || pad->type == GC_DDR) &&
-			GC_PSX_LEN(id[i]) > max_len &&
-			GC_PSX_LEN(id[i]) <= GC_PSX_BYTES) {
-			max_len = GC_PSX_LEN(id[i]);
-		}
-	}
-
-	/* Read in all the data */
-	for (i = 0; i < max_len; i++) {
-		gc_psx_command(gc, 0, data2);
-		for (j = 0; j < GC_MAX_DEVICES; j++)
-			data[j][i] = data2[j];
-	}
-
-	local_irq_restore(flags);
-
-	GPIO_SET = GC_PSX_CLOCK | GC_PSX_SELECT;
-
-	/* Set id's to the real value */
-	for (i = 0; i < GC_MAX_DEVICES; i++)
-		id[i] = GC_PSX_ID(id[i]);
-}
-
 static void gc_psx_report_one(struct gc_pad *pad, unsigned char psx_type,
 				  unsigned char *data)
 {
@@ -928,22 +865,6 @@ static void gc_psx_report_one(struct gc_pad *pad, unsigned char psx_type,
 	}
 }
 
-static void gc_psx_process_packet(struct gc *gc)
-{
-	unsigned char data[GC_MAX_DEVICES][GC_PSX_BYTES];
-	unsigned char id[GC_MAX_DEVICES];
-	struct gc_pad *pad;
-	int i;
-
-	gc_psx_read_packet(gc, data, id);
-
-	for (i = 0; i < GC_MAX_DEVICES; i++) {
-		pad = &gc->pads[i];
-		if (pad->type == GC_PSX || pad->type == GC_DDR)
-			gc_psx_report_one(pad, id[i], data[i]);
-	}
-}
-
 /*
  * gc_timer() initiates reads of console pads data.
  */
@@ -959,17 +880,7 @@ static void gc_timer(unsigned long private)
 #endif
 
 /*
- * N64 & Gamecube pads
- */
-
-	if (gc->pad_count[GC_N64])
-		gc_n64_process_packet(gc);
-		
-	if (gc->pad_count[GC_GCUBE])
-		gc_gcube_process_packet(gc);
-		
-/*
- * NES and SNES pads or mouse
+ * A1UP GPIIO Support
  */
 
 	if (gc->pad_count[GC_NES] ||
@@ -979,13 +890,6 @@ static void gc_timer(unsigned long private)
 		gc_nes_process_packet(gc);
 	}
 	
-/*
- * PSX controllers
- */
-
-	if (gc->pad_count[GC_PSX] || gc->pad_count[GC_DDR])
-		gc_psx_process_packet(gc);
-
 	mod_timer(&gc->timer, jiffies + GC_REFRESH_TIME);
 }
 

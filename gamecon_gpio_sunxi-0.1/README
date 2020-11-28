@@ -2,15 +2,7 @@
     
 1. Intro
 
-The driver is designed to be used with retro game controllers connected to
-Raspberry Pi's GPIO. Currently, up to 4 controllers of following types are
-supported:
-
--NES gamepads
--SNES gamepads
--PSX/PS2 gamepads
--N64 gamepads
--Gamecube gamepads
+The driver is designed to be used on Arcade1up PCBs based on Allwinner SOCs
     
 The driver is based on gamecon driver (see
 Documentation/input/joystick-parport.txt), but uses different pinout and
@@ -117,7 +109,7 @@ Perform the following operations as root (or with sudo):
 
 
 4.1 Configure pads
-# modprobe gamecon_gpio_rpi map=<pad1/GPIO0>,<pad2/GPIO1>,<pad3/GPIO4>, \
+# modprobe gamecon_gpio_sunxi map=<pad1/GPIO0>,<pad2/GPIO1>,<pad3/GPIO4>, \
 #                               <pad4/GPIO7>,<pad5/GPIO2>,<pad6/GPIO3>
     where <pad...> is a number defining the pad type:
     0 = no connection
@@ -149,12 +141,6 @@ Use "tail /var/log/kern.log" to verify that module loading was successful
     where X corresponds to the pad index (0-3)
     
 
-4.3 Calibrating the axis of N64 analog pad
-# jscal -s 4,1,0,0,0,6972137,6972137,1,0,0,0,6547006,6468127, \
-#        1,0,0,0,536854528,536854528,1,0,0,0,536854528,536854528 /dev/input/jsX
-    for each N64 controller
-
-
 5. More information
 -http://www.raspberrypi.org/phpBB3/viewtopic.php?f=78&t=15787
--https://github.com/RetroPie/RetroPie-Setup/wiki/GPIO-Modules#gamecon_gpio_rpi
+-https://github.com/RetroPie/RetroPie-Setup/wiki/GPIO-Modules#gamecon_gpio_sunxi
